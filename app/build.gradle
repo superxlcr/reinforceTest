@@ -1,12 +1,20 @@
 apply plugin: 'com.android.application'
 
 android {
-    compileSdkVersion 26
-    buildToolsVersion "26.0.0"
+    signingConfigs {
+        config {
+            keyAlias 'Dummy'
+            keyPassword '123456'
+            storeFile file('E:/reinforceTest/reinforceTestKey.jks')
+            storePassword '123456'
+        }
+    }
+    compileSdkVersion 25
+    buildToolsVersion "25.0.3"
     defaultConfig {
         applicationId "com.example.superxlcr.reinforcetest"
         minSdkVersion 19
-        targetSdkVersion 26
+        targetSdkVersion 25
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
@@ -15,15 +23,94 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.config
+        }
+        debug {
+            signingConfig signingConfigs.config
         }
     }
 }
 
 dependencies {
-    compile fileTree(dir: 'libs', include: ['*.jar'])
+    compile fileTree(include: ['*.jar'], dir: 'libs')
     androidTestCompile('com.android.support.test.espresso:espresso-core:2.2.2', {
         exclude group: 'com.android.support', module: 'support-annotations'
     })
-    compile 'com.android.support:appcompat-v7:26.0.0-alpha1'
+    compile 'com.android.support:appcompat-v7:25.3.1'
     testCompile 'junit:junit:4.12'
+}
+
+task buildReinforceApk(dependsOn: 'assembleDebug') << {
+    // 初始化变量
+    final String WORKSPACE = rootDir.getAbsolutePath() + '/workspace/';
+    final String TOOLS_DIR = WORKSPACE + 'tools/';
+
+    final String SRC_APK = 'src.apk'; // 提供的apk名称
+    final String REIN_FORCE_APK = 'reinforce.apk';
+    final String REIN_FORCE_DEX = 'reinforce.dex'
+    final String OUTPUT_DEX = 'classes.dex';
+
+    final String APK_TOOL = 'apktool_2.2.3.jar';
+
+    // 清理目录
+    file(WORKSPACE + REIN_FORCE_APK).delete();
+    file(WORKSPACE + REIN_FORCE_DEX).delete();
+    file(WORKSPACE + OUTPUT_DEX).delete();
+    file(WORKSPACE + 'src').deleteDir();
+    // 复制解壳apk
+    copy {
+        from 'build/outputs/apk/app-debug.apk'
+        into WORKSPACE
+        rename {
+            REIN_FORCE_APK
+        }
+    }
+    // 解压解壳apk
+    exec {
+        workingDir WORKSPACE
+        commandLine 'java', '-jar', TOOLS_DIR + APK_TOOL, 'd', '-s', REIN_FORCE_APK, '-o', 'src'
+    }
+    // 复制解壳dex，重命名
+    copy {
+        from WORKSPACE + 'src/classes.dex'
+        into WORKSPACE
+        rename {
+            REIN_FORCE_DEX
+        }
+    }
+    // 加壳
+    OutputStream os = new ByteArrayOutputStream();
+    exec {
+        workingDir TOOLS_DIR
+        commandLine 'java', '-cp', '.', 'DexTools', WORKSPACE + SRC_APK, WORKSPACE + REIN_FORCE_DEX, WORKSPACE + OUTPUT_DEX
+        standardOutput = os;
+    }
+    println os.toString()
+    // 替换原dex
+    file(WORKSPACE + 'src/' + OUTPUT_DEX).delete();
+    copy {
+        from WORKSPACE + OUTPUT_DEX
+        into WORKSPACE + 'src'
+    }
+    // 打包apk
+    exec {
+        workingDir WORKSPACE
+        commandLine 'java', '-jar', TOOLS_DIR + APK_TOOL, 'b', 'src'
+    }
+    // 复制打包完的apk
+    copy {
+        from WORKSPACE + 'src/dist/' + REIN_FORCE_APK
+        into WORKSPACE
+        rename {
+            'output-unsigned.apk'
+        }
+    }
+    exec {
+        workingDir WORKSPACE
+        commandLine 'jarsigner', '-sigalg', 'MD5withRSA',
+                '-digestalg', 'SHA1',
+                '-keystore', rootDir.getAbsolutePath() + '/reinforceTestKey.jks',
+                '-storepass', '123456',
+                '-signedjar', 'output.apk', 'output-unsigned.apk', 'Dummy'
+    }
 }
