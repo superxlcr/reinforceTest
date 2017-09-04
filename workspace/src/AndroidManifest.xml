@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?><manifest xmlns:android="a" package="com.example.superxlcr.gsontest" platformBuildVersionCode="25" platformBuildVersionName="7.1.1">
+    <meta-data android:name="android.support.VERSION" android:value="25.3.1"/>
+    <application android:allowBackup="true" android:debuggable="true" android:icon="@mipmap/ic_launcher" android:label="@string/app_name" name="com.example.superxlcr.gsontest2.MyApplication" android:supportsRtl="true" android:theme="@style/AppTheme">
+        <activity android:name="com.example.superxlcr.gsontest.MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
