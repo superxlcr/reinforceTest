@@ -1,3 +1,5 @@
+import groovy.xml.*
+
 apply plugin: 'com.android.application'
 
 android {
@@ -145,14 +147,34 @@ private void decodeApk() {
 }
 
 private void modifyManifest() {
-    // TODO
-    def srcManifest = new XmlParser().parse("${WORKSPACE}${SRC_DIR}/AndroidManifest.xml");
-    println srcManifest.application[0]
-    println srcManifest.application[0].attributes().get('{http://schemas.android.com/apk/res/android}allowBackup')
-    println srcManifest.application[0].attribute('{http://schemas.android.com/apk/res/android}allowBackup')
-    println srcManifest.application[0]["@name"]
-    println srcManifest.application[0]['@android:name']
+    // 声明命名空间
+    def android = new Namespace('http://schemas.android.com/apk/res/android', 'android')
 
-    def reinforceManifest = new XmlParser().parse("${WORKSPACE}${REIN_FORCE_DIR}/AndroidManifest.xml");
-//    println reinforceManifest.application["@android:name"]
+    // 获取源apk application name
+    def parser = new XmlParser()
+    def srcManifest = parser.parse("${WORKSPACE}${SRC_DIR}/AndroidManifest.xml")
+    def srcApp = srcManifest.application[0].attribute(android.name)
+
+    // 获取壳apk application name
+    def reinforceManifest = new XmlParser().parse("${WORKSPACE}${REIN_FORCE_DIR}/AndroidManifest.xml")
+    def reinforceApp = reinforceManifest.application[0].attribute(android.name)
+
+    // 合成新Manifest
+    // 新建meta-data节点
+    parser.createNode(
+            srcManifest.application[0],
+            new QName('http://schemas.android.com/apk/res/android', 'meta-data'),
+            [
+                    (android.name):'APPLICATION_CLASS_NAME',
+                    (android.value):srcApp
+            ]
+    )
+
+    // 修改application节点
+    srcManifest.application[0].attributes().put(android.name, reinforceApp)
+    println srcManifest.application[0].attribute(android.name)
+
+    Writer writer = new FileWriter("${WORKSPACE}${SRC_DIR}/test.xml")
+    writer.write(XmlUtil.serialize(srcManifest))
+    writer.flush()
 }
