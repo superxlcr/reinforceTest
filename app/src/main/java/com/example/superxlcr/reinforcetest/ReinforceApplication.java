@@ -38,7 +38,7 @@ public class ReinforceApplication extends Application {
 
     private static final String APPLICATION_CLASS_NAME = "APPLICATION_CLASS_NAME";
 
-    private String mApkFileName;
+    private String mDexFileName;
     private String mOdexPath;
     private String mLibPath;
 
@@ -52,6 +52,7 @@ public class ReinforceApplication extends Application {
 
     @Override
     public void onCreate() {
+        // TODO provider onCreate?
         String appClassName = null;
         // 获取Application名字
         try {
@@ -116,7 +117,7 @@ public class ReinforceApplication extends Application {
     }
 
     private void initDexEnvironment() {
-        mApkFileName = getApplicationInfo().dataDir + "/real.apk";
+        mDexFileName = getApplicationInfo().dataDir + "/real.dex";
         mOdexPath = getApplicationInfo().dataDir + "/odex";
         File odexDir = new File(mOdexPath);
         if (!odexDir.exists()) {
@@ -128,16 +129,16 @@ public class ReinforceApplication extends Application {
     private void decryptDex() {
         byte[] dex = readDexFromApk();
         if (dex != null) {
-            byte[] realApkBytes = decryption(dex);
-            if (realApkBytes != null) {
+            byte[] realDexBytes = decryption(dex);
+            if (realDexBytes != null) {
                 try {
-                    File realApk = new File(mApkFileName);
-                    if (realApk.exists()) {
-                        realApk.delete();
+                    File realDex = new File(mDexFileName);
+                    if (realDex.exists()) {
+                        realDex.delete();
                     }
-                    realApk.createNewFile();
-                    FileOutputStream fos = new FileOutputStream(realApk);
-                    fos.write(realApkBytes);
+                    realDex.createNewFile();
+                    FileOutputStream fos = new FileOutputStream(realDex);
+                    fos.write(realDexBytes);
                     fos.flush();
                     fos.close();
                 } catch (IOException e) {
@@ -174,20 +175,29 @@ public class ReinforceApplication extends Application {
 
     private byte[] decryption(byte[] dex) {
         int totalLen = dex.length;
-        byte[] realApkLenBytes = new byte[4];
-        System.arraycopy(dex, totalLen - 4, realApkLenBytes, 0, 4);
-        ByteArrayInputStream bais = new ByteArrayInputStream(realApkLenBytes);
+        byte[] realDexLenBytes = new byte[4];
+        System.arraycopy(dex, totalLen - 4, realDexLenBytes, 0, 4);
+        ByteArrayInputStream bais = new ByteArrayInputStream(realDexLenBytes);
         DataInputStream ins = new DataInputStream(bais);
-        int realApkLen;
+        int realDexLen;
         try {
-            realApkLen = ins.readInt();
+            realDexLen = ins.readInt();
         } catch (IOException e) {
             Log.e(TAG, Log.getStackTraceString(e));
             return null;
         }
-        byte[] realApkBytes = new byte[realApkLen];
-        System.arraycopy(dex, totalLen - 4 - realApkLen, realApkBytes, 0, realApkLen);
-        return realApkBytes;
+        byte[] realDexBytes = new byte[realDexLen];
+        System.arraycopy(dex, totalLen - 4 - realDexLen, realDexBytes, 0, realDexLen);
+        return decrypt(realDexBytes);
+    }
+
+    private byte[] decrypt(byte[] bytes) {
+        // TODO
+        byte[] result = new byte[bytes.length];
+        for (int i = 0; i < bytes.length; i++) {
+            result[i] = (byte) (bytes[i] ^ 0x4598);
+        }
+        return result;
     }
 
     private void replaceDexLoader() {
@@ -200,7 +210,7 @@ public class ReinforceApplication extends Application {
         Object loadedApk = weakReference.get();
         ClassLoader mClassLoader = (ClassLoader) RefInvoke
                 .getFieldObject(LOADED_APK, "mClassLoader", loadedApk);
-        DexClassLoader dexClassLoader = new DexClassLoader(mApkFileName, mOdexPath, mLibPath,
+        DexClassLoader dexClassLoader = new DexClassLoader(mDexFileName, mOdexPath, mLibPath,
                 mClassLoader);
         RefInvoke.setFieldObject(LOADED_APK, "mClassLoader", loadedApk, dexClassLoader);
     }

@@ -28,6 +28,8 @@ android {
             signingConfig signingConfigs.config
         }
         debug {
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
             signingConfig signingConfigs.config
         }
     }
@@ -38,7 +40,6 @@ dependencies {
     androidTestCompile('com.android.support.test.espresso:espresso-core:2.2.2', {
         exclude group: 'com.android.support', module: 'support-annotations'
     })
-    compile 'com.android.support:appcompat-v7:25.3.1'
     testCompile 'junit:junit:4.12'
 }
 
@@ -63,55 +64,16 @@ ext {
 
 
 task buildReinforceApk(dependsOn: 'assembleDebug') << {
-//    // 清理目录
-//    cleanDir();
-//    // 解压apk
-//    decodeApk();
+    // 清理目录
+    cleanDir();
+    // 解压apk
+    decodeApk();
     // 修改Manifest文件
     modifyManifest();
-//    // 复制解壳dex，重命名
-//    copy {
-//        from WORKSPACE + 'src/classes.dex'
-//        into WORKSPACE
-//        rename {
-//            REIN_FORCE_DEX
-//        }
-//    }
-//    // 加壳
-//    OutputStream os = new ByteArrayOutputStream();
-//    exec {
-//        workingDir TOOLS_DIR
-//        commandLine 'java', '-cp', '.', 'DexTools', WORKSPACE + SRC_APK, WORKSPACE + REIN_FORCE_DEX, WORKSPACE + OUTPUT_DEX
-//        standardOutput = os;
-//    }
-//    println os.toString()
-//    // 替换原dex
-//    file(WORKSPACE + 'src/' + OUTPUT_DEX).delete();
-//    copy {
-//        from WORKSPACE + OUTPUT_DEX
-//        into WORKSPACE + 'src'
-//    }
-//    // 打包apk
-//    exec {
-//        workingDir WORKSPACE
-//        commandLine 'java', '-jar', TOOLS_DIR + APK_TOOL, 'b', 'src'
-//    }
-//    // 复制打包完的apk
-//    copy {
-//        from WORKSPACE + 'src/dist/' + REIN_FORCE_APK
-//        into WORKSPACE
-//        rename {
-//            'output-unsigned.apk'
-//        }
-//    }
-//    exec {
-//        workingDir WORKSPACE
-//        commandLine 'jarsigner', '-sigalg', 'MD5withRSA',
-//                '-digestalg', 'SHA1',
-//                '-keystore', rootDir.getAbsolutePath() + '/reinforceTestKey.jks',
-//                '-storepass', '123456',
-//                '-signedjar', 'output.apk', 'output-unsigned.apk', 'Dummy'
-//    }
+    // 加壳
+    reinforce();
+    // 重新打包apk并签名
+    rebuildAndSign();
 }
 
 private void cleanDir() {
@@ -160,7 +122,7 @@ private void modifyManifest() {
     def reinforceApp = reinforceManifest.application[0].attribute(android.name)
 
     // 合成新Manifest
-    // 新建meta-data节点
+    // 新建meta-data节点，记录源apk application Name
     parser.createNode(
             srcManifest.application[0],
             new QName('http://schemas.android.com/apk/res/android', 'meta-data'),
@@ -170,11 +132,54 @@ private void modifyManifest() {
             ]
     )
 
-    // 修改application节点
+    // 修改application节点，改为壳apk application Name
     srcManifest.application[0].attributes().put(android.name, reinforceApp)
     println srcManifest.application[0].attribute(android.name)
 
-    Writer writer = new FileWriter("${WORKSPACE}${SRC_DIR}/test.xml")
+    // 写入文件
+    Writer writer = new FileWriter("${WORKSPACE}${SRC_DIR}/AndroidManifest.xml")
     writer.write(XmlUtil.serialize(srcManifest))
     writer.flush()
+}
+
+private void reinforce() {
+    // 加壳
+    OutputStream os = new ByteArrayOutputStream();
+    exec {
+        workingDir TOOLS_DIR
+        // 参数为 源dex 壳dex 输出dex
+        commandLine 'java', '-cp', '.', 'DexTools', "${WORKSPACE}${SRC_DIR}/classes.dex", "${WORKSPACE}${REIN_FORCE_DIR}/classes.dex", WORKSPACE + OUTPUT_DEX
+        standardOutput = os;
+    }
+    println os.toString()
+    // 输出dex替换源dex
+    file("${WORKSPACE}${SRC_DIR}/classes.dex").delete();
+    copy {
+        from WORKSPACE + OUTPUT_DEX
+        into WORKSPACE + SRC_DIR
+    }
+}
+
+private void rebuildAndSign() {
+    // 打包apk
+    exec {
+        workingDir WORKSPACE
+        commandLine 'java', '-jar', TOOLS_DIR + APK_TOOL, 'b', SRC_DIR
+    }
+    // 复制打包完的apk
+    copy {
+        from "${WORKSPACE}${SRC_DIR}/dist/${SRC_APK}"
+        into WORKSPACE
+        rename {
+            OUTPUT_UNSIGNED_APK
+        }
+    }
+    exec {
+        workingDir WORKSPACE
+        commandLine 'jarsigner', '-sigalg', 'MD5withRSA',
+                '-digestalg', 'SHA1',
+                '-keystore', rootDir.getAbsolutePath() + '/reinforceTestKey.jks',
+                '-storepass', '123456',
+                '-signedjar', OUTPUT_APK, OUTPUT_UNSIGNED_APK, 'Dummy'
+    }
 }
